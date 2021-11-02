@@ -6,9 +6,15 @@ import matplotlib.pyplot as plt
 import math
 import json
 from utility_functions import mf4_reader,lowpass_downsample,plots, write_wave, channel_data_extractor, mf4_reader_vib,lowpass_ds_vib
-rootdir = "E:/shaefler_thesis/Eol_mf4_paper"
-JSON_PATH = "E:/shaefler_thesis/code/stft_EoL_no_seg_paper.json"
 
+rootdirNormalData = "path to normal data"
+jsonPathNormalData = "saveing directory"
+
+rootdirFaultData = "path to fault data"
+jsonPathFaultData = "save directory"
+
+rootdirNormalDataFewSamples = "path to few sample normal data"
+jsonPathNormalDataFewSample = "save directory"
 
 
 def save_stft(rootdir, json_path, n_fft=1024, hop_length=512):
@@ -63,5 +69,7 @@ def save_stft(rootdir, json_path, n_fft=1024, hop_length=512):
 
                     
 
-save_stft(rootdir,JSON_PATH)
+save_stft(rootdirNormalData,jsonPathNormalData)
+save_stft(rootdirFaultData,jsonPathFaultData)
+save_stft(rootdirNormalDataFewSamples,jsonPathNormalDataFewSample)
             
