@@ -73,7 +73,6 @@ These visualizations help in understanding whether the model is successfully ide
 
 The model is saved in TensorFlow format after training, making it reusable for inference or further training. The loss during training and validation is also visualized to track the model's learning process. The plotted loss curves give insight into whether the model is converging or overfitting.
 
-### Conclusion
 
 In this workflow:
 - We loaded sequential data and preprocessed it for training.
@@ -89,3 +88,109 @@ This process is effective for anomaly detection in sequential data, and it can b
 
 
 This script demonstrates how to train an autoencoder with K-Fold Cross-Validation, visualize the reconstruction error, and detect anomalies using MSE distributions. You can customize the model architecture, learning rate, or dataset to adapt it to different tasks.
+
+
+
+## Tutorial: Saving STFT Results for Vibration Data in JSON Format
+
+This tutorial walks through the process of extracting and saving Short-Time Fourier Transform (STFT) data for vibration analysis using MATLAB and Python. The code reads vibration data from `.mf4` files, extracts RPM-related slices, calculates order maps via MATLAB, and saves the results into JSON files for further analysis.
+
+### 1. **Overview**
+
+The code processes vibration data from multiple files, applying the following steps:
+- **Data Loading**: Reads vibration and RPM data from `.mf4` files.
+- **RPM Filtering**: Identifies and slices the portion of the data where the RPM is stable within a specific range.
+- **STFT Calculation**: Uses MATLAB to compute order maps (STFT with RPM-based frequency scaling).
+- **Saving Results**: Stores the computed STFT data and metadata in JSON format.
+
+### 2. **Dependencies**
+
+The following libraries and tools are required:
+- **Python Packages**: `numpy`, `librosa`, `matplotlib`, `json`, and custom utility functions from `utility_functions`.
+- **MATLAB Engine for Python**: Used to call MATLAB functions from Python. Make sure the `matlab.engine` package is installed and MATLAB is accessible.
+
+### 3. **Functionality Breakdown**
+
+#### 3.1. **Data Reading and RPM Filtering**
+The function `save_stft()` takes in the root directory of the dataset and processes each file:
+- **RPM Extraction**: The RPM channel is identified using the `mf4_reader_vib()` function. The RPM values are sliced to focus on a stable RPM range (e.g., 598-601 RPM). This ensures that only the relevant portion of the data is used.
+  
+- **Vibration Data Extraction**: Vibration data for each channel is extracted, synchronized with the corresponding RPM slice.
+
+#### 3.2. **STFT Calculation Using MATLAB**
+MATLAB is called through the `matlab.engine` interface to calculate the order map:
+```python
+mat = eng.rpmordermap(matlab.double(vib.tolist()), sample_rate, matlab.double(rpm.tolist()), 0.5, 'scale', 'db', 'Window', 'hann', 'amplitude', 'power');
+```
+- The MATLAB function `rpmordermap` computes the order map, where:
+  - **vib**: Vibration data.
+  - **rpm**: Corresponding RPM values.
+  - **0.5**: Frequency resolution.
+  - Other parameters control scaling, windowing, and amplitude calculation.
+
+#### 3.3. **Data Padding**
+To ensure consistency across samples, the computed STFT data (order map) is padded to a fixed size (`770x722`). The data is stored as a 2D array:
+```python
+mat_append = np.zeros((770, 722), dtype=np.float32)
+mat_append[:,:len(mat[1,:])] = mat
+```
+This step ensures that all the STFT outputs have the same dimensions, even if some data segments are shorter.
+
+#### 3.4. **Saving to JSON**
+The processed data (order maps) and metadata (file names) are saved to JSON format:
+```python
+data['order'].append(mat_append.tolist())
+data['mapping'].append(sample_name)
+```
+Each file's data is saved as a list of arrays, with a corresponding entry in the "mapping" list indicating the file it came from.
+
+### 4. **How to Use the Code**
+
+#### 4.1. **Set Paths**
+Ensure that the paths to the datasets are correctly set:
+```python
+rootdirNormalData = "path to normal data"
+jsonPathNormalData = "path to save normal data"
+rootdirFaultData = "path to fault data"
+jsonPathFaultData = "path to save fault data"
+rootdirNormalDataFewSamples = "path to few sample normal data"
+jsonPathNormalDataFewSample = "path to save few sample data"
+```
+
+#### 4.2. **Set Parameters**
+You can modify the STFT parameters as needed. For example, change the FFT size (`n_fft`), hop length (`hop_length`), or the number of segments:
+```python
+save_stft(rootdirNormalData, jsonPathNormalData, n_fft=1024, hop_length=512, num_segments=10)
+```
+
+#### 4.3. **Run the Script**
+After setting the paths and parameters, run the script to process the vibration data and save the results:
+```python
+save_stft(rootdirNormalData, jsonPathNormalData)
+save_stft(rootdirFaultData, jsonPathFaultData)
+save_stft(rootdirNormalDataFewSamples, jsonPathNormalDataFewSample)
+```
+
+### 5. **Output Format**
+
+The output is saved as a JSON file with the following structure:
+```json
+{
+  "mapping": ["file1.mf4", "file2.mf4", ...],
+  "order": [
+    [[stft_data_array_1], [stft_data_array_2], ...]
+  ]
+}
+```
+- **mapping**: Contains the filenames of the processed files.
+- **order**: Contains the computed and padded STFT (order map) for each file.
+
+### 6. **Extending the Code**
+
+- **Custom Filters**: You can modify the RPM range or other filters applied to the data to fit your specific use case.
+- **Feature Extraction**: The STFT output can be used for further feature extraction, such as detecting anomalies or trends.
+- **Visualization**: You may extend the code to visualize the STFT outputs using `librosa` or `matplotlib` for easier data interpretation.
+
+### Conclusion
+
+This script provides a robust method for processing vibration data, computing STFT (order maps) via MATLAB, and saving the results in a structured JSON format. It's highly customizable, allowing you to modify parameters, filters, and output formatting according to your needs.
