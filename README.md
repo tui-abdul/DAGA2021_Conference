@@ -13,170 +13,79 @@ Rapid changes in the global industry like the emergence of electric vehicles and
 Video Presentation
 https://www.youtube.com/embed/3yEo0NBNgXc
 
-# Tutorial: Training an Autoencoder Model with K-Fold Cross-Validation and MSE Analysis
 
-This tutorial walks through a machine learning workflow using an autoencoder neural network built with TensorFlow and Keras. The autoencoder is trained on sequential data, with the aim of detecting anomalies or faulty patterns by reconstructing input data and calculating reconstruction errors. We'll explore the following steps:
-- Loading and preprocessing data
-- Building the autoencoder model
-- Training with K-Fold Cross-Validation
-- Evaluating the model using MSE (Mean Squared Error) on test and train sets
-- Saving the results to files
+## Tutorial: Training an Autoencoder with K-Fold Cross-Validation and MSE Analysis
 
-### Key Components
-1. **Autoencoder**: A type of neural network used to learn efficient representations (encoding) of input data and reconstruct it back.
-2. **K-Fold Cross-Validation**: A technique that divides the dataset into multiple folds for robust model evaluation.
-3. **MSE Analysis**: A way to detect anomalies by comparing reconstruction errors between the training and test sets.
+This tutorial explains the workflow of training an autoencoder model for anomaly detection using TensorFlow/Keras, focusing on the following steps:
+1. Loading and preprocessing the data.
+2. Building the autoencoder model.
+3. Training the model using K-Fold Cross-Validation.
+4. Evaluating the model using Mean Squared Error (MSE) analysis.
+5. Visualizing and saving results.
 
-### Requirements
+### Overview of the Key Components
 
-Ensure you have the following installed:
+1. **Autoencoder**: A type of neural network where the goal is to reconstruct input data by compressing it into a lower-dimensional space (encoding) and then expanding it back to the original space (decoding). It helps identify anomalies by evaluating how well the model can reconstruct the input.
+  
+2. **K-Fold Cross-Validation**: A model validation technique where the dataset is split into K parts (or folds). Each fold acts as a validation set once while the others serve as the training set. This helps to get a robust estimate of model performance by training and validating on multiple data splits.
 
-```bash
-pip install numpy tensorflow scikit-learn pandas librosa matplotlib
-```
+3. **Mean Squared Error (MSE) Analysis**: MSE measures the average squared difference between the input data and its reconstructed version from the autoencoder. Anomalies are often detected when the reconstruction error (MSE) is significantly higher for faulty data than for normal data.
 
-### 1. **Loading and Preprocessing Data**
+### 1. **Data Loading and Preprocessing**
 
-We load data from JSON files and convert them into NumPy arrays for further processing. The data represents sequential information (`order` and `mapping`).
+The first step in training the model is loading the dataset from JSON files and preparing it for input into the model. The data consists of sequences (`order` and `mapping`), and is split into training and testing sets. The preprocessing involves reshaping the data into a 2D format (required for feeding into the dense layers) and normalizing the input features using MinMaxScaler to ensure they lie within a consistent range, typically [0, 1].
 
-```python
-def load_data(json_path):
-    with open(json_path) as fp:
-        data = json.load(fp)
-    x = np.array(data["order"])
-    z = np.array(data["mapping"])
-    return x, z
+### 2. **Autoencoder Model Architecture**
 
-# Similar functions for loading test data
-```
+The autoencoder model is built with fully connected layers (Dense layers). The network follows this structure:
+- **Encoder**: A series of layers that compress the input data into a latent space (a lower-dimensional representation).
+- **Latent Space**: A bottleneck layer that captures the most important information about the input data.
+- **Decoder**: A mirrored series of layers that attempt to reconstruct the original data from the compressed latent representation.
 
-- The function `load_data` reads the JSON files and returns the `order` and `mapping` as NumPy arrays.
-- There are separate functions for training and test data, including different test sets to allow combining test data from multiple sources.
+This architecture allows the model to learn how to encode the essential patterns of the input data and then reconstruct it. If the model performs well on normal data but poorly on faulty data (with high reconstruction error), the model can be used for anomaly detection.
 
-### 2. **Building the Autoencoder**
+### 3. **Training with K-Fold Cross-Validation**
 
-The `build_model` function constructs the autoencoder using Keras. The encoder learns compressed representations of the input, and the decoder reconstructs the input from this compressed form.
+K-Fold Cross-Validation is used to split the dataset into multiple training and validation sets to improve the robustness of the model. Instead of training on a single train-validation split, K-Fold ensures that the model is validated on different parts of the dataset, giving a better indication of how well it will generalize.
 
-```python
-def build_model(input_shape):
-    input_data = layers.Input(input_shape)
-    x = layers.Dense(256, activation='relu')(input_data)
-    x = layers.Dense(128, activation='relu')(x)
-    BN = layers.Dense(16, activation='relu', name='latent_space')(x)  # Latent space
-    x = layers.Dense(128, activation='relu')(BN)
-    output = layers.Dense(input_shape)(x)
-    
-    model = Model(input_data, output)  # Full autoencoder
-    encoder = Model(input_data, BN)    # Encoder model
-    return model, encoder
-```
+During each fold:
+- The model is trained on the training set.
+- Validation is performed on the validation set.
+- Early stopping is used to prevent overfitting, stopping training when validation performance stops improving.
 
-- **Latent Space**: A bottleneck layer that represents the compressed version of the input.
-- **Model**: The autoencoder reconstructs the input, while the `encoder` is a separate model that only encodes the input data.
+### 4. **Model Evaluation and Saving Results**
 
-### 3. **Training the Model**
+After training, the model is evaluated by measuring how well it reconstructs the input data:
+- **Training Reconstruction**: The model tries to reconstruct the training data as accurately as possible, and MSE is used to measure the reconstruction error.
+- **Testing Reconstruction**: The model's performance is tested on unseen data, specifically faulty data. A higher MSE for faulty data compared to normal data indicates that the model can identify anomalies.
 
-In the `train` function, the model is trained using K-Fold Cross-Validation. K-Fold splits the training data into multiple subsets, and training is done multiple times on different subsets.
+These reconstruction errors are stored in a DataFrame and saved into Excel files for further analysis.
 
-```python
-def train():
-    x_train, y_train = load_data(json_path)
-    x_test, y_test = load_data_test(json_path_faulty)
-    
-    x_train_reshaped = x_train.reshape(-1, x_train.shape[1] * x_train.shape[2])
-    model, encoder = build_model(input_shape=(x_train_reshaped.shape[1]))
-    
-    optimiser = Adam(learning_rate=0.0001)
-    model.compile(optimizer=optimiser, loss='mse', metrics=['mean_squared_error'])
-    
-    # K-Fold Cross-Validation
-    kf = KFold(n_splits=5)
-    for train_index, validation_index in kf.split(x_train_reshaped):
-        x_train_fold = x_train_reshaped[train_index]
-        x_val_fold = x_train_reshaped[validation_index]
-        history = model.fit(x_train_fold, x_train_fold, validation_data=(x_val_fold, x_val_fold), epochs=50, batch_size=10, callbacks=[early_stop])
-        break
-```
+### 5. **MSE Distribution and Visualizations**
 
-- **KFold**: Divides the dataset into 5 folds and trains the model multiple times to evaluate performance across different splits.
-- **Early Stopping**: The training is stopped early if the validation loss does not improve for a few epochs.
+After the model has been trained and evaluated, the reconstruction error (MSE) is visualized using histograms:
+- **Training Set Distribution**: This shows how well the model reconstructs normal data. The MSE for normal data should ideally be low.
+- **Test Set Distribution**: This represents the reconstruction error for faulty data, which is expected to have a higher MSE than the training data.
 
-### 4. **Normalizing and Scaling**
+These visualizations help in understanding whether the model is successfully identifying anomalies. If the test set has consistently higher reconstruction errors than the training set, it indicates that the model can detect faulty or anomalous data.
 
-Data is normalized using `MinMaxScaler`, which scales features to a given range (default [0,1]).
+### 6. **Saving the Model and Visualizing Training History**
 
-```python
-scalar = MinMaxScaler()
-x_train_transformed = scalar.fit_transform(x_train_reshaped)
-x_test_transformed = scalar.transform(x_test)
-```
-
-### 5. **Evaluating and Saving the Results**
-
-After training, the model's performance is evaluated by comparing the MSE of the training and test sets. The results are then saved to an Excel file and plotted.
-
-```python
-def train():
-    ...
-    mse_test = np.mean(np.abs(x_test_transformed - reconstructions), axis=1)
-    mse_train = np.mean(np.abs(x_train_transformed - reconstructions_train), axis=1)
-    
-    # Saving results
-    df = pd.DataFrame({'mse_train': mse_train.tolist(), 'y_train': y_train.tolist()})
-    df2 = pd.DataFrame({'mse_test': mse_test.tolist(), 'y_test': y_test.tolist()})
-    df.to_excel("mse_train.xlsx")
-    df2.to_excel("mse_test.xlsx")
-    
-    # Plotting results
-    fig, ax = plt.subplots()
-    ax.hist(mse_test, bins=20, density=True, alpha=0.75, color="green", label="Test Set")
-    ax.hist(mse_train, bins=20, density=True, alpha=0.75, color="red", label="Train Set")
-    plt.title("MSE Distribution")
-    plt.xlabel("Reconstruction Error")
-    plt.ylabel("Frequency")
-    plt.legend()
-    plt.show()
-```
-
-- **MSE Calculation**: The mean squared error is computed for both the training and test sets to evaluate reconstruction performance.
-- **Histograms**: The histograms of reconstruction errors for training and test sets provide a visual insight into the model's performance.
-
-### 6. **Saving the Model**
-
-The model is saved in TensorFlow format using `save_model` for future use.
-
-```python
-model.save(filepath)
-```
-
-### 7. **Visualizing Training History**
-
-The `plot_history` function plots the training and validation loss curves over epochs to visualize how the model performs during training.
-
-```python
-def plot_history(history):
-    plt.plot(history.history["loss"], label="Training Loss")
-    plt.plot(history.history["val_loss"], label="Validation Loss")
-    plt.legend()
-    plt.title("Training and Validation Loss")
-    plt.show()
-```
-
-### Running the Code
-
-To run the code:
-1. Ensure the JSON data files are in the correct location.
-2. Run the script with:
-
-```bash
-python your_script.py
-```
-
-The script will:
-- Train the model with K-Fold Cross-Validation.
-- Save results, including MSE distributions and the trained model.
-- Display loss curves and histograms of reconstruction errors.
+The model is saved in TensorFlow format after training, making it reusable for inference or further training. The loss during training and validation is also visualized to track the model's learning process. The plotted loss curves give insight into whether the model is converging or overfitting.
 
 ### Conclusion
+
+In this workflow:
+- We loaded sequential data and preprocessed it for training.
+- An autoencoder model was built and trained using K-Fold Cross-Validation for robust performance estimation.
+- The reconstruction error (MSE) was used to identify faulty data.
+- Results were saved, and visualizations of MSE distributions and loss curves were generated to evaluate the model's performance.
+
+This process is effective for anomaly detection in sequential data, and it can be customized by adjusting the model architecture, training parameters, or evaluation metrics based on the specific use case.
+
+
+
+
+
 
 This script demonstrates how to train an autoencoder with K-Fold Cross-Validation, visualize the reconstruction error, and detect anomalies using MSE distributions. You can customize the model architecture, learning rate, or dataset to adapt it to different tasks.
